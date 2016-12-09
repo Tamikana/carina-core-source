@@ -1,21 +1,28 @@
 package com.qaprosoft.carina.core.foundation.grid;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
-import org.json.JSONObject;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.support.ui.FluentWait;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Function;
 import com.google.gson.Gson;
-import com.pubnub.api.Callback;
-import com.pubnub.api.Pubnub;
-import com.pubnub.api.PubnubException;
+import com.pubnub.api.PNConfiguration;
+import com.pubnub.api.PubNub;
+import com.pubnub.api.callbacks.PNCallback;
+import com.pubnub.api.callbacks.SubscribeCallback;
+import com.pubnub.api.enums.PNStatusCategory;
+import com.pubnub.api.models.consumer.PNPublishResult;
+import com.pubnub.api.models.consumer.PNStatus;
+import com.pubnub.api.models.consumer.pubsub.PNMessageResult;
+import com.pubnub.api.models.consumer.pubsub.PNPresenceEventResult;
 import com.qaprosoft.carina.core.foundation.grid.GridRequest.Operation;
 import com.qaprosoft.carina.core.foundation.report.zafira.ZafiraIntegrator;
 import com.qaprosoft.carina.core.foundation.utils.Configuration;
@@ -32,9 +39,17 @@ public class DeviceGrid {
 	
 	private static final Logger LOGGER = Logger.getLogger(DeviceGrid.class);
 	
-	private static final String GRID_SESSION_ID = Configuration.get(Parameter.CI_RUN_ID) != null ? Configuration.get(Parameter.CI_RUN_ID) : UUID.randomUUID().toString();
+	private static final String  GRID_SESSION_ID = Configuration.get(Parameter.CI_RUN_ID) != null ? Configuration.get(Parameter.CI_RUN_ID) :  UUID.randomUUID().toString();
+	private static final Integer GRID_DEVICE_TIMEOUT = Configuration.getInt(Parameter.ZAFIRA_GIRD_TIMEOUT);
+	private static final Integer GRID_HB_TIMEOUT = 120;
+	private static final Integer GRID_HB_INTERVAL = 59;
 	
-	private static Pubnub heartbeat;
+	private static final String PN_PKEY = Configuration.get(Parameter.ZAFIRA_GRID_PKEY);
+	private static final String PN_SKEY = Configuration.get(Parameter.ZAFIRA_GRID_SKEY);
+	private static final String PN_CHANNEL = Configuration.get(Parameter.ZAFIRA_GRID_CHANNEL);
+	
+	
+	private static PubNub heartbeat;
 	
 	/**
 	 * Connect to remote mobile device.
@@ -44,18 +59,18 @@ public class DeviceGrid {
 	 */
 	public static String connectDevice(String testId, List<String> deviceModels) 
 	{
-		Pubnub punub = new Pubnub(Configuration.get(Parameter.ZAFIRA_GRID_PKEY), Configuration.get(Parameter.ZAFIRA_GRID_SKEY));
+		PubNub pubnub = new PubNub(getGeneralPNConfig());
 		GridCallback gridCallback = new GridCallback(testId);
 		GridRequest rq = new GridRequest(GRID_SESSION_ID, testId, deviceModels, Operation.CONNECT);
 		try {
 			startHeartBeat();
-			punub.subscribe(Configuration.get(Parameter.ZAFIRA_GRID_CHANNEL), gridCallback);
-			
-			punub.publish(Configuration.get(Parameter.ZAFIRA_GRID_CHANNEL), toJsonObject(rq), new Callback() {});
+			pubnub.subscribe().channels(Arrays.asList(PN_CHANNEL)).execute();
+			pubnub.addListener(gridCallback);
+			publishMessage(pubnub, rq);
 			ZafiraIntegrator.logEvent(new EventType(Type.REQUEST_DEVICE_CONNECT, GRID_SESSION_ID, testId, new Gson().toJson(rq)));
 			
 			new FluentWait<GridCallback>(gridCallback)
-				.withTimeout(Configuration.getInt(Parameter.ZAFIRA_GIRD_TIMEOUT), TimeUnit.SECONDS)
+				.withTimeout(GRID_DEVICE_TIMEOUT, TimeUnit.SECONDS)
 				.pollingEvery(10, TimeUnit.SECONDS)
 				.until(new Function<GridCallback, Boolean>() 
 				{
@@ -69,13 +84,13 @@ public class DeviceGrid {
 		catch (TimeoutException e) {
 			ZafiraIntegrator.logEvent(new EventType(Type.DEVICE_WAIT_TIMEOUT, GRID_SESSION_ID, testId, new Gson().toJson(rq)));
 			rq.setOperation(Operation.DISCONNECT);
-			punub.publish(Configuration.get(Parameter.ZAFIRA_GRID_CHANNEL), toJsonObject(rq), new Callback() {});
+			publishMessage(pubnub, rq);
 			LOGGER.error(e.getMessage(), e);
 		}
 		catch (Exception e) {
 			LOGGER.error(e.getMessage(), e);
 		} finally {
-			punub.unsubscribeAll();
+			pubnub.unsubscribeAll();
 		}
 		
 		return gridCallback.getUdid();
@@ -91,23 +106,22 @@ public class DeviceGrid {
 		try
 		{
 			GridRequest rq = new GridRequest(GRID_SESSION_ID, testId, udid, Operation.DISCONNECT);
-			Pubnub punub = new Pubnub(Configuration.get(Parameter.ZAFIRA_GRID_PKEY), Configuration.get(Parameter.ZAFIRA_GRID_SKEY));
-			punub.publish(Configuration.get(Parameter.ZAFIRA_GRID_CHANNEL), new JSONObject(new ObjectMapper().writeValueAsString(rq)), new Callback() {});
+			publishMessage(new PubNub(getGeneralPNConfig()), rq);
 			ZafiraIntegrator.logEvent(new EventType(Type.REQUEST_DEVICE_DISCONNECT, GRID_SESSION_ID, testId, new Gson().toJson(rq)));
 		} catch(Exception e) {
 			LOGGER.error(e.getMessage(), e);
 		}
 	}
 	
-	public static void startHeartBeat() throws PubnubException
+	public static void startHeartBeat()
 	{
 		if(heartbeat == null)
 		{
-			heartbeat = new Pubnub(Configuration.get(Parameter.ZAFIRA_GRID_PKEY), Configuration.get(Parameter.ZAFIRA_GRID_SKEY));
-			heartbeat.setHeartbeat(120);
-			heartbeat.setHeartbeatInterval(60);
-			heartbeat.setUUID(GRID_SESSION_ID);
-			heartbeat.subscribe(Configuration.get(Parameter.ZAFIRA_GRID_CHANNEL), new Callback(){});
+			PNConfiguration pnConfiguration = getGeneralPNConfig();
+			pnConfiguration.setPresenceTimeoutWithCustomInterval(GRID_HB_TIMEOUT, GRID_HB_INTERVAL);
+			pnConfiguration.setUuid(GRID_SESSION_ID);
+			heartbeat = new PubNub(pnConfiguration);
+			heartbeat.subscribe().channels(Arrays.asList(PN_CHANNEL)).execute();
 		}
 	}
 	
@@ -115,11 +129,11 @@ public class DeviceGrid {
 	{
 		if(heartbeat != null)
 		{
-			heartbeat.unsubscribeAllChannels();
+			heartbeat.unsubscribeAll();
 		}
 	}
 	
-	public static class GridCallback extends Callback
+	public static class GridCallback extends SubscribeCallback
 	{
 		private String udid;
 		private String testId;
@@ -129,16 +143,19 @@ public class DeviceGrid {
 			this.testId = testId;
 		}
 
-		@Override
-		public void successCallback(String channel, Object message)
+		public String getUdid()
 		{
+			return udid;
+		}
 
-			String json = ((JSONObject) message).toString();
-			if (json.contains(testId) && json.contains("connected"))
+		@Override
+		public void message(PubNub pubnub, PNMessageResult message) {
+			JsonNode msg = message.getMessage(); 
+			if (msg != null && msg.has("testId") && msg.has("connected"))
 			{
 				try
 				{
-					GridResponse rs = new ObjectMapper().readValue(json, GridResponse.class);
+					GridResponse rs = new ObjectMapper().treeToValue(msg, GridResponse.class);
 					if (rs.isConnected())
 					{
 						udid = rs.getSerial();
@@ -152,23 +169,39 @@ public class DeviceGrid {
 			}
 		}
 
-		public String getUdid()
-		{
-			return udid;
+		@Override
+		public void presence(PubNub pubnub, PNPresenceEventResult presence) {
+			// Do nothing
+		}
+
+		@Override
+		public void status(PubNub pubnub, PNStatus status) {
+			if (status.getCategory() == PNStatusCategory.PNUnexpectedDisconnectCategory || status.getCategory() == PNStatusCategory.PNTimeoutCategory) 
+			{
+				pubnub.reconnect();
+			}
 		}
 	}
 	
-	private static JSONObject toJsonObject(Object object)
+	private static void publishMessage(PubNub pubnub, Object msg)
 	{
-		JSONObject json = null;
-		try
-		{
-			json = new JSONObject(new ObjectMapper().writeValueAsString(object));
-		}
-		catch(Exception e)
-		{
-			LOGGER.error(e.getMessage());
-		}
-		return json;
+		pubnub.publish().message(msg).channel(PN_CHANNEL)
+			.async(new PNCallback<PNPublishResult>() {
+		        @Override
+		        public void onResponse(PNPublishResult result, PNStatus status) {
+		            if (status.isError()) 
+		            {
+		            	LOGGER.error("Unable to publush PubNub messsage: " + status.getStatusCode());
+		            }
+		        }
+		    });
+	}
+	
+	private static PNConfiguration getGeneralPNConfig()
+	{
+		PNConfiguration pnConfiguration = new PNConfiguration();
+		pnConfiguration.setPublishKey(PN_PKEY);
+		pnConfiguration.setSubscribeKey(PN_SKEY);
+		return pnConfiguration;
 	}
 }
