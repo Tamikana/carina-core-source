@@ -114,7 +114,8 @@ public class AndroidUtils {
 		} while (!scrolled && repeat < tries);
 
 		if (!scrolled) {
-			try {
+			throw new RuntimeException("Deprecated scrollTo in Appium driver!");
+/*			try {
 				LOGGER.info("Another solution Scroll to '" + text + "'");
 				((AndroidDriver<?>) DriverPool.getDriverByThread())
 						.scrollTo(text);
@@ -124,7 +125,7 @@ public class AndroidUtils {
 						+ String.format("Scrolling to text '%s'", text));
 				scrolled = false;
 			}
-		}
+*/		}
 		return scrolled;
 	}
 	
@@ -172,7 +173,9 @@ public class AndroidUtils {
 	public static boolean scrollTo2(final String text) {
 		boolean scrolled = false;
 
-		try {
+		throw new RuntimeException("Deprecated scrollTo in Appium driver!");
+		
+/*		try {
 			LOGGER.info("Scroll to '" + text + "' using AndroidDriver default solution.");
 			((AndroidDriver<?>) DriverPool.getDriverByThread()).scrollTo(text);
 			scrolled = true;
@@ -182,6 +185,7 @@ public class AndroidUtils {
 			scrolled = false;
 		}
 		return scrolled;
+*/		
 	}
 
 	/**
