@@ -28,7 +28,7 @@ import com.qaprosoft.carina.core.foundation.api.APIMethodBuilder;
 import com.qaprosoft.carina.core.foundation.listeners.APITestListener;
 
 @Listeners({ APITestListener.class })
-public abstract class APITest extends AbstractTest
+public class APITest extends AbstractTest
 {
     protected APIMethodBuilder apiMethodBuilder;
     

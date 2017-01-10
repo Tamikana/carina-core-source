@@ -64,7 +64,9 @@ public class Configuration
 		
 		CLASS_MODE("class_mode"),
 		
-		METHOD_MODE("method_mode");
+		METHOD_MODE("method_mode"),
+		
+		NONE("none");
 		
 		private final String key;
 
