@@ -118,14 +118,14 @@ public abstract class AbstractTest // extends DriverHelper
 		// Set SoapUI log4j properties
 		System.setProperty("soapui.log4j.config", "./src/main/resources/soapui-log4j.xml");
 
-		Logger root = Logger.getRootLogger();
+/*		Logger root = Logger.getRootLogger();
 		Enumeration<?> allLoggers = root.getLoggerRepository().getCurrentCategories();
 		while (allLoggers.hasMoreElements()) {
 			Category tmpLogger = (Category) allLoggers.nextElement();
 			if (tmpLogger.getName().equals("com.qaprosoft.carina.core")) {
 				tmpLogger.setLevel(Level.toLevel(Configuration.get(Parameter.CORE_LOG_LEVEL)));
 			}
-		}
+		}*/
 		
 		startDate = new Date().getTime();
 		LOGGER.info(Configuration.asString());
