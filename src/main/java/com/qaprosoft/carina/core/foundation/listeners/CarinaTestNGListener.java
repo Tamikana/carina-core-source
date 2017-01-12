@@ -17,36 +17,67 @@ package com.qaprosoft.carina.core.foundation.listeners;
 
 import org.apache.log4j.Logger;
 import org.testng.ITestContext;
+import org.testng.ITestListener;
 import org.testng.ITestResult;
 
 import com.qaprosoft.carina.core.foundation.Carina;
 
-public class CarinaTestNGListener extends TestArgsListener {
+public class CarinaTestNGListener implements ITestListener {
 	private static final Logger LOGGER = Logger.getLogger(CarinaTestNGListener.class);
 	private static ThreadLocal<String> testClass = new ThreadLocal<String>();
-	private static ThreadLocal<Boolean> testSuite = new ThreadLocal<Boolean>();
+	private static Boolean isSuiteRegistered = false;
+	
 	private static int methodsCount = 0;
 
 	@Override
+	public void onTestFailedButWithinSuccessPercentage(ITestResult result) {
+		LOGGER.info("onTestFailedButWithinSuccessPercentage");
+	}
+	
+	@Override
 	public void onStart(ITestContext context) {
-		LOGGER.info("onStart...");
+		LOGGER.info("<tests> onStart");
 		
 		try {
-			if (testSuite.get() == null) {
+			if (!isSuiteRegistered) {
+				isSuiteRegistered = true;
 				//really 1st execution
 				methodsCount = context.getSuite().getAllMethods().size();
 				Carina.executeBeforeSuite(context);
-				testSuite.set(true);
+			} else {
+				LOGGER.warn("Suite->onStart executed one more time!");
 			}
 		} catch (Throwable e) {
 			LOGGER.error(e.getMessage(), e);
 		}
 	}
+	
+	@Override
+	public void onFinish(ITestContext context) {
+		LOGGER.info("<tests> onFininsh");
+		try {
+			if (isAnyTestClassRegistered()) {
+				//execute AfterClass as next test belongs to new class
+				removeTestClass();
+				Carina.executeAfterClass(context);
+			}
+		
+			if (methodsCount == 0) {
+				// execute afterSuite only when all testMethods were started as minimal
+				LOGGER.info("onFinish...");
+				Carina.executeAfterSuite(context);
+			}
+			Carina.executeAfterSuite(context);
+		} catch (Throwable e) {
+			LOGGER.error(e.getMessage(), e);
+		}
+
+	}
+	
+	// TestMethods listeners
 
 	@Override
 	public void onTestStart(ITestResult result) {
-		LOGGER.info("onTestStart...");
-
 		try {
 			String className = result.getTestClass().getName();
 			if (isTestClassRegistered(className)) {
@@ -63,6 +94,7 @@ public class CarinaTestNGListener extends TestArgsListener {
 			}
 			
 			//execute before method anyway
+			LOGGER.info("<method> onTestStart...");
 			Carina.executeBeforeMethod(result);
 			methodsCount--;
 
@@ -73,7 +105,7 @@ public class CarinaTestNGListener extends TestArgsListener {
 
 	@Override
 	public void onTestSuccess(ITestResult result) {
-		LOGGER.info("onTestSuccess...");
+		LOGGER.info("<method> onTestSuccess...");
 		try {
 			Carina.executeAfterMethod(result);
 		} catch (Throwable e) {
@@ -83,7 +115,7 @@ public class CarinaTestNGListener extends TestArgsListener {
 
 	@Override
 	public void onTestFailure(ITestResult result) {
-		LOGGER.info("onTestFailure...");
+		LOGGER.info("<method> onTestFailure...");
 		try {
 			Carina.executeAfterMethod(result);
 		} catch (Throwable e) {
@@ -93,7 +125,7 @@ public class CarinaTestNGListener extends TestArgsListener {
 
 	@Override
 	public void onTestSkipped(ITestResult result) {
-		LOGGER.info("onTestSkipped...");
+		LOGGER.info("<method> onTestSkipped...");
 		try {
 			Carina.executeAfterMethod(result);
 		} catch (Throwable e) {
@@ -101,26 +133,7 @@ public class CarinaTestNGListener extends TestArgsListener {
 		}
 	}
 
-	@Override
-	public void onFinish(ITestContext context) {
-		
-		try {
-			if (isAnyTestClassRegistered()) {
-				//execute AfterClass as next test belongs to new class
-				removeTestClass();
-				Carina.executeAfterClass(context);
-			}
-		
-			if (methodsCount == 0) {
-				// execute afterSuite only when all testMethods were started as minimal
-				LOGGER.info("onFinish...");
-				Carina.executeAfterSuite(context);
-			}
-		} catch (Throwable e) {
-			LOGGER.error(e.getMessage(), e);
-		}
 
-	}
 
 	private void addTestClass(String testClassName) {
 		testClass.set(testClassName);
@@ -158,13 +171,5 @@ public class CarinaTestNGListener extends TestArgsListener {
 			name = testClass.get();
 		}
 		return name;
-	}
-
-	public static boolean isSuiteRegistered() {
-		boolean res = false;
-		if (testSuite.get() != null) {
-			res = testSuite.get();
-		}
-		return res;
 	}
 }
