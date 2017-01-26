@@ -113,8 +113,6 @@ public abstract class AbstractTest // extends DriverHelper
 		
 		// Set log4j properties
 		PropertyConfigurator.configure(ClassLoader.getSystemResource("log4j.properties"));
-		// Set SoapUI log4j properties
-		System.setProperty("soapui.log4j.config", "./src/main/resources/soapui-log4j.xml");
 
 		try {
 			Logger root = Logger.getRootLogger();
@@ -577,8 +575,6 @@ public abstract class AbstractTest // extends DriverHelper
 		DriverPool.registerExtraDriver2Thread(extraDriver, Thread.currentThread().getId());
 		return extraDriver;		
 	}
-	
-
 
 	protected WebDriver getExtraDriver() {
 		return extraDriver;
