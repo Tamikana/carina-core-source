@@ -75,7 +75,9 @@ public class HttpClient
 	
 	public static void setupProxy()
 	{
-		if (Configuration.getBoolean(Parameter.BROWSERMOB_PROXY)) {
+		if (Configuration.getBoolean(Parameter.BROWSERMOB_PROXY) 
+		        && DriverPool.getBrowserMobProxyByThread() == null) {
+	        
 			LOGGER.debug("Starting BrowserMobProxy...");
 			// integrate browserMob proxy if required here
 			BrowserMobProxy proxy = new BrowserMobProxyServer();

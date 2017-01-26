@@ -123,14 +123,29 @@ public class DriverPool
 		threadId2Proxy.put(Thread.currentThread().getId(),  proxy);
 	}
 	
+	/**
+	 * Method return already registered proxy instance.
+	 * null in case if it hasn't been started.
+	 * 
+	 * @return proxyInstance
+	 */
+	public static BrowserMobProxy getBrowserMobProxyByThread()
+    {
+        BrowserMobProxy proxy = null;
+        long threadId = Thread.currentThread().getId();
+        if (threadId2Proxy.containsKey(threadId)) {
+            proxy = threadId2Proxy.get(threadId);
+        } else {
+            LOGGER.error("Proxy hasn't been started in this thread.");;
+        }
+        return proxy;
+    }
+	
 	public static BrowserMobProxy getBrowserMobProxy()
 	{
-		BrowserMobProxy proxy = null;
-		long threadId = Thread.currentThread().getId();
-		if (threadId2Proxy.containsKey(threadId)) {
-			proxy = threadId2Proxy.get(threadId);
-		} else {
-			Assert.fail("There is not registered BrowserMobProxy for thread: " + threadId);
+		BrowserMobProxy proxy = getBrowserMobProxyByThread();
+		if (null == proxy) {
+			Assert.fail("There is not registered BrowserMobProxy for thread: " + Thread.currentThread().getId());
 		}
 		return proxy;
 	}
