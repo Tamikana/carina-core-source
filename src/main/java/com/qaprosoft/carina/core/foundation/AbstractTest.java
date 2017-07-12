@@ -270,10 +270,6 @@ public abstract class AbstractTest // extends DriverHelper
             // clear jira tickets to be sure that next test is not affected.
             Jira.clearTickets();
 
-
-            Artifacts.clearArtifacts();
-
-
             try {
                 ThreadLogAppender tla = (ThreadLogAppender) Logger.getRootLogger().getAppender("ThreadLogAppender");
                 if (tla != null) {
